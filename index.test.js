@@ -89,4 +89,22 @@ describe("health-api", () => {
         expect(response.statusCode).toBe(404);
         expect(response.body.error).toBe("service not found");
     });
+
+    test("GET /services/:id returns 404 after the service is deleted", async () => {
+        const createResponse = await request(app)
+            .post("/services")
+            .send({
+                name: "my-api",
+                url: "https://example.com"
+            });
+
+        await request(app)
+            .delete(`/services/${createResponse.body.id}`);
+        
+        const response = await request(app)
+            .get(`/services/${createResponse.body.id}`);
+
+        expect(response.statusCode).toBe(404);
+        expect(response.body.error).toBe("service not found");
+    });
 });

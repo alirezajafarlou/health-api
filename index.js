@@ -36,14 +36,6 @@ app.get("/services", (req, res) => {
     res.json(services);
 });
 
-app.get("/services/:id", (req, res) => {
-    const service = services.find((service) => {
-        return service.id === req.params.id;
-    });
-
-    res.json(service);
-});
-
 app.delete("/services/:id", (req, res) => {
     const index = services.findIndex((service) => {
         return service.id === req.params.id;
@@ -60,6 +52,20 @@ app.delete("/services/:id", (req, res) => {
     res.status(200).json({
         message: `deleted service with the id ${req.params.id}`
     });
+});
+
+app.get("/services/:id", (req, res) => {
+    const service = services.find((service) => {
+        return service.id === req.params.id;
+    });
+
+    if (!service) {
+        return res.status(404).json({
+            error: "service not found"
+        });
+    }
+
+    res.json(service);
 });
 
 if (require.main === module) {
