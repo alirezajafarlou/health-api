@@ -35,4 +35,15 @@ describe("health-api", () => {
         expect(response.statusCode).toBe(201);
         expect(response.body.name).toBe("my-api")
     });
+
+    test("GET /services returns the info about existing services", async () => {
+        const response = await request(app).get("/services");
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body[0].id).toMatch(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        );
+        expect(response.body[0].name).toBe("my-api");
+        expect(response.body[0].url).toBe("https://example.com");
+    });
 });

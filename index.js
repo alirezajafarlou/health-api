@@ -1,8 +1,8 @@
 const express = require("express");
-
 const app = express();
 app.use(express.json());
 const services = [];
+const { randomUUID } = require("crypto");
 const port = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
@@ -22,7 +22,7 @@ app.get("/about", (req, res) => {
 
 app.post("/services", (req, res) => {
     const service = {
-        id: services.length + 1,
+        id: randomUUID(),
         name: req.body.name,
         url: req.body.url
     };
@@ -30,6 +30,10 @@ app.post("/services", (req, res) => {
     services.push(service);
 
     res.status(201).json(service);
+});
+
+app.get("/services", (req, res) => {
+    res.json(services);
 });
 
 if (require.main === module) {
