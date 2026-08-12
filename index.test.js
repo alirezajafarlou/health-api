@@ -64,4 +64,29 @@ describe("health-api", () => {
         expect(response.body.url).toBe("https://example.com");
         
     });
+    
+    test("POST /Finding and deleting an existing service", async () => {
+        const createResponse = await request(app)
+            .post("/services")
+            .send({
+                name: "my-api",
+                url: "https://example.com"
+            });
+        
+        const response = await request(app)
+            .delete(`/services/${createResponse.body.id}`);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.message).toBe(
+            `deleted service with the id ${createResponse.body.id}`
+        );
+    });
+
+    test("POST /Finding and deleting a non-existing service", async () => {
+        const response = await request(app)
+            .delete("/services/00000000-0000-0000-0000-000000000000");
+
+        expect(response.statusCode).toBe(404);
+        expect(response.body.error).toBe("service not found");
+    });
 });

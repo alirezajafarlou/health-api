@@ -44,6 +44,24 @@ app.get("/services/:id", (req, res) => {
     res.json(service);
 });
 
+app.delete("/services/:id", (req, res) => {
+    const index = services.findIndex((service) => {
+        return service.id === req.params.id;
+    });
+
+    if (index === -1){
+        return res.status(404).json({
+            error: "service not found"
+        });
+    }
+
+    services.splice(index, 1);
+
+    res.status(200).json({
+        message: `deleted service with the id ${req.params.id}`
+    });
+});
+
 if (require.main === module) {
     app.listen(port, () => {
         console.log(`Server listening on port ${port}`);
