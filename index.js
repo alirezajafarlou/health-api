@@ -11,6 +11,13 @@ app.get("/health", (req, res) => {
     res.json({ status: "healthy" });
 });
 
+app.get("/about", (req, res) => {
+    res.json({ 
+        name: "health-api",
+        description: "a health checker api"
+    });
+});
+
 if (require.main === module) {
     app.listen(port, () => {
         console.log(`Server listening on port ${port}`);

@@ -15,4 +15,11 @@ describe("health-api", () => {
         expect(response.statusCode).toBe(200);
         expect(response.body.status).toBe("healthy");
     });
+
+    test("GET /about returns description about the api", async () => {
+        const response = await request(app).get("/about");
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.description).toBe("a health checker api");
+    });
 });
