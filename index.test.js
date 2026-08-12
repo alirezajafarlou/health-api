@@ -46,4 +46,22 @@ describe("health-api", () => {
         expect(response.body[0].name).toBe("my-api");
         expect(response.body[0].url).toBe("https://example.com");
     });
+
+    test("GET /matching the given service with the existing services", async () => {
+        const createResponse = await request(app)
+            .post("/services")
+            .send({
+                name: "my-api",
+                url: "https://example.com"
+            });
+
+        const response = await request(app)
+            .get(`/services/${createResponse.body.id}`);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.id).toBe(createResponse.body.id);
+        expect(response.body.name).toBe("my-api");
+        expect(response.body.url).toBe("https://example.com");
+        
+    });
 });

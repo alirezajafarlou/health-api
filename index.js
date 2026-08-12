@@ -36,6 +36,14 @@ app.get("/services", (req, res) => {
     res.json(services);
 });
 
+app.get("/services/:id", (req, res) => {
+    const service = services.find((service) => {
+        return service.id === req.params.id;
+    });
+
+    res.json(service);
+});
+
 if (require.main === module) {
     app.listen(port, () => {
         console.log(`Server listening on port ${port}`);
