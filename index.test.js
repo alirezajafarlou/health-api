@@ -1,6 +1,8 @@
 const request = require("supertest");
 const app = require("./index");
 
+global.fetch = jest.fn();
+
 describe("health-api", () => {
     afterAll(async () => {
         await app.pool.end();
@@ -39,6 +41,29 @@ describe("health-api", () => {
         expect(response.body.name).toBe("my-api")
     });
 
+    test("POST /services rejects missing fields", async () => {
+        const response = await request(app)
+            .post("/services")
+            .send({
+                name: "my-api"
+            });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("name and url are required");
+    });
+
+    test("POST /services rejects an invalid URL", async () => {
+        const response = await request(app)
+            .post("/services")
+            .send({
+                name: "my-api",
+                url: "not-a-url"
+            });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("url must be a valid URL");
+    });
+
     test("GET /services returns the info about existing services", async () => {
         await request(app)
         .post("/services")
@@ -73,6 +98,27 @@ describe("health-api", () => {
         expect(response.body.name).toBe("my-api");
         expect(response.body.url).toBe("https://example.com");
         
+    });
+
+    test("GET /services/:id/health checks the service health", async () => {
+        fetch.mockResolvedValue({
+            ok: true
+        });
+
+        const createResponse = await request(app)
+            .post("/services")
+            .send({
+                name: "my-api",
+                url: "https://example.com"
+            });
+
+        const response = await request(app)
+            .get(`/services/${createResponse.body.id}/health`);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.id).toBe(createResponse.body.id);
+        expect(response.body.name).toBe("my-api");
+        expect(response.body.status).toBe("healthy");
     });
     
     test("DELETE /services/:id deletes an existing service", async () => {

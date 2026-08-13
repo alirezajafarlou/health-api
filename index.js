@@ -32,22 +32,54 @@ app.get("/about", (req, res) => {
 });
 
 app.post("/services", async(req, res) => {
-    const result = await pool.query(
-        `INSERT INTO services (name, url)
-         VALUES ($1, $2)
-         RETURNING *`,
-        [req.body.name, req.body.url]
-    );
+    const { name, url } = req.body;
 
-    res.status(201).json(result.rows[0]);
+    if (!name || !url) {
+        return res.status(400).json({
+            error: "name and url are required"
+        });
+    }
+
+    try {
+        new URL(url);
+    } catch {
+        return res.status(400).json({
+            error: "url must be a valid URL"
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            `INSERT INTO services (name, url)
+             VALUES ($1, $2)
+             RETURNING *`,
+            [name, url]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error("Database error:", error);
+
+        res.status(500).json({
+            error: "internal server error"
+        });
+    }
 });
 
 app.get("/services", async (req, res) => {
-    const result = await pool.query(
-        "SELECT * FROM services"
-    );
+    try {
+        const result = await pool.query(
+            "SELECT * FROM services"
+        );
 
-    res.json(result.rows);
+        res.json(result.rows);
+    } catch (error) {
+        console.error("Database error:", error);
+
+        res.status(500).json({
+            error: "internal server error"
+        });
+    }
 });
 
 app.delete("/services/:id", async (req, res) => {
@@ -80,6 +112,35 @@ app.get("/services/:id", async (req, res) => {
     }
 
     res.json(result.rows[0]);
+});
+
+app.get("/services/:id/health", async (req, res) => {
+    const result = await pool.query(
+        "SELECT * FROM services WHERE id = $1",
+        [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+        return res.status(404).json({
+            error: "service not found"
+        });
+    }
+
+    const service = result.rows[0];
+
+    try {
+        const response = await fetch(service.url);
+
+        res.json({
+            id: service.id,
+            name: service.name,
+            status: response.ok ? "healthy" : "unhealthy"
+        });
+    } catch {
+    return res.status(500).json({
+        error: "internal server error"
+    });
+}
 });
 
 if (require.main === module) {
