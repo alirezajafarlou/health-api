@@ -1,9 +1,18 @@
 const express = require("express");
 const app = express();
 app.use(express.json());
-const services = [];
-const { randomUUID } = require("crypto");
+
+const { Pool } = require("pg");
+
 const port = process.env.PORT || 3000;
+
+const pool = new Pool({
+    host: "localhost",
+    port: 5432,
+    user: "healthapi",
+    password: "healthapi",
+    database: "healthapi"
+});
 
 app.get("/", (req, res) => {
     res.json({ message: "health-api is running" });
@@ -20,52 +29,55 @@ app.get("/about", (req, res) => {
     });
 });
 
-app.post("/services", (req, res) => {
-    const service = {
-        id: randomUUID(),
-        name: req.body.name,
-        url: req.body.url
-    };
+app.post("/services", async(req, res) => {
+    const result = await pool.query(
+        `INSERT INTO services (name, url)
+         VALUES ($1, $2)
+         RETURNING *`,
+        [req.body.name, req.body.url]
+    );
 
-    services.push(service);
-
-    res.status(201).json(service);
+    res.status(201).json(result.rows[0]);
 });
 
-app.get("/services", (req, res) => {
-    res.json(services);
+app.get("/services", async (req, res) => {
+    const result = await pool.query(
+        "SELECT * FROM services"
+    );
+
+    res.json(result.rows);
 });
 
-app.delete("/services/:id", (req, res) => {
-    const index = services.findIndex((service) => {
-        return service.id === req.params.id;
-    });
+app.delete("/services/:id", async (req, res) => {
+    const result = await pool.query(
+        "DELETE FROM services WHERE id = $1 RETURNING *",
+        [req.params.id]
+    );
 
-    if (index === -1){
+    if (result.rows.length === 0) {
         return res.status(404).json({
             error: "service not found"
         });
     }
-
-    services.splice(index, 1);
 
     res.status(200).json({
         message: `deleted service with the id ${req.params.id}`
     });
 });
 
-app.get("/services/:id", (req, res) => {
-    const service = services.find((service) => {
-        return service.id === req.params.id;
-    });
+app.get("/services/:id", async (req, res) => {
+    const result = await pool.query(
+        "SELECT * FROM services WHERE id = $1",
+        [req.params.id]
+    );
 
-    if (!service) {
+    if (result.rows.length === 0) {
         return res.status(404).json({
             error: "service not found"
         });
     }
 
-    res.json(service);
+    res.json(result.rows[0]);
 });
 
 if (require.main === module) {
@@ -75,3 +87,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
+module.exports.pool = pool;

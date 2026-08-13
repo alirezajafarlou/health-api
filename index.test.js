@@ -1,8 +1,11 @@
 const request = require("supertest");
 const app = require("./index");
-const expectCookies = require("supertest/lib/cookies");
 
 describe("health-api", () => {
+    afterAll(async () => {
+        await app.pool.end();
+    });
+
     test("GET / returns the application message", async () => {
         const response = await request(app).get("/");
 
@@ -37,17 +40,24 @@ describe("health-api", () => {
     });
 
     test("GET /services returns the info about existing services", async () => {
-        const response = await request(app).get("/services");
+        await request(app)
+        .post("/services")
+        .send({
+            name: "my-api",
+            url: "https://example.com"
+        });
 
-        expect(response.statusCode).toBe(200);
-        expect(response.body[0].id).toMatch(
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        );
-        expect(response.body[0].name).toBe("my-api");
-        expect(response.body[0].url).toBe("https://example.com");
+    const response = await request(app).get("/services");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body[0].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    expect(response.body[0].name).toBe("my-api");
+    expect(response.body[0].url).toBe("https://example.com");
     });
 
-    test("GET /matching the given service with the existing services", async () => {
+    test("GET /services/:id returns the matching service", async () => {
         const createResponse = await request(app)
             .post("/services")
             .send({
@@ -65,7 +75,7 @@ describe("health-api", () => {
         
     });
     
-    test("POST /Finding and deleting an existing service", async () => {
+    test("DELETE /services/:id deletes an existing service", async () => {
         const createResponse = await request(app)
             .post("/services")
             .send({
