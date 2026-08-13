@@ -121,6 +121,14 @@ describe("health-api", () => {
         expect(response.body.name).toBe("my-api");
         expect(response.body.status).toBe("healthy");
     });
+
+    test("GET /services/:id/health rejects an invalid UUID", async () => {
+        const response = await request(app)
+            .get("/services/not-a-uuid/health");
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("invalid service id");
+    });
     
     test("DELETE /services/:id deletes an existing service", async () => {
         const createResponse = await request(app)
@@ -164,4 +172,21 @@ describe("health-api", () => {
         expect(response.statusCode).toBe(404);
         expect(response.body.error).toBe("service not found");
     });
+
+    test("GET /services/:id rejects an invalid UUID", async () => {
+        const response = await request(app)
+            .get("/services/not-a-uuid");
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("invalid service id");
+    });
+
+    test("DELETE /services/:id rejects an invalid UUID", async () => {
+        const response = await request(app)
+            .delete("/services/not-a-uuid");
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("invalid service id");
+    });
+
 });

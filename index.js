@@ -6,6 +6,13 @@ app.use(express.json());
 
 const { Pool } = require("pg");
 
+const uuidRegex =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(id) {
+    return uuidRegex.test(id);
+}
+
 const port = process.env.PORT || 3000;
 
 // Create a PostgreSQL connection pool using environment variables.
@@ -86,6 +93,12 @@ app.get("/services", async (req, res) => {
 });
 
 app.delete("/services/:id", async (req, res) => {
+    if (!isValidUUID(req.params.id)) {
+        return res.status(400).json({
+            error: "invalid service id"
+        });
+    }
+
     const result = await pool.query(
         "DELETE FROM services WHERE id = $1 RETURNING *",
         [req.params.id]
@@ -103,6 +116,12 @@ app.delete("/services/:id", async (req, res) => {
 });
 
 app.get("/services/:id", async (req, res) => {
+    if (!isValidUUID(req.params.id)) {
+        return res.status(400).json({
+            error: "invalid service id"
+        });
+    }
+
     const result = await pool.query(
         "SELECT * FROM services WHERE id = $1",
         [req.params.id]
@@ -119,6 +138,12 @@ app.get("/services/:id", async (req, res) => {
 
 // Check the service URL to determine its health.
 app.get("/services/:id/health", async (req, res) => {
+    if (!isValidUUID(req.params.id)) {
+        return res.status(400).json({
+            error: "invalid service id"
+        });
+    }
+
     const result = await pool.query(
         "SELECT * FROM services WHERE id = $1",
         [req.params.id]
