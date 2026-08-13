@@ -14,6 +14,28 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: healthapi
+      DB_PASSWORD: healthapi
+      DB_NAME: healthapi
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: healthapi
+          POSTGRES_PASSWORD: healthapi
+          POSTGRES_DB: healthapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U healthapi -d healthapi"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,10 +43,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.19.0
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Set up database
+        run: PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f db/schema.sql
 
       - name: Run tests
         run: npm test

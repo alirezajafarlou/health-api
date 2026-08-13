@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const app = express();
 app.use(express.json());
@@ -7,11 +9,11 @@ const { Pool } = require("pg");
 const port = process.env.PORT || 3000;
 
 const pool = new Pool({
-    host: "localhost",
-    port: 5432,
-    user: "healthapi",
-    password: "healthapi",
-    database: "healthapi"
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
 });
 
 app.get("/", (req, res) => {
