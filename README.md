@@ -6,6 +6,7 @@ Health API lets you register HTTP/HTTPS services and check their availability fr
 
 ## Dashboard
 ![Health API dark mode](docs/screenshots/dashboard-dark.png)
+
 ![Health API dark mode](docs/screenshots/dashboard-light.png)
 
 ## Features
