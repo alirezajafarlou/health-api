@@ -3,7 +3,24 @@ const app = require("./index");
 
 global.fetch = jest.fn();
 
+const createdServiceIds = [];
+
+async function createTestService() {
+    const response = await request(app).post("/services").send({
+        name: "my-api",
+        url: "https://example.com",
+    });
+
+    createdServiceIds.push(response.body.id);
+
+    return response;
+}
+
 describe("health-api", () => {
+    beforeEach(() => {
+        fetch.mockReset();
+    });
+
     afterAll(async () => {
         // Close the PostgreSQL connection pool after all tests finish.
         await app.pool.end();
@@ -60,26 +77,26 @@ describe("health-api", () => {
     });
 
     test("GET /services returns the info about existing services", async () => {
-        await request(app).post("/services").send({
-            name: "my-api",
-            url: "https://example.com",
-        });
+        const createResponse = await createTestService();
 
-        const response = await request(app).get("/services");
+    const response = await request(app).get("/services");
 
-        expect(response.statusCode).toBe(200);
-        expect(response.body[0].id).toMatch(
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-        );
-        expect(response.body[0].name).toBe("my-api");
-        expect(response.body[0].url).toBe("https://example.com");
+    expect(response.statusCode).toBe(200);
+
+    const service = response.body.find(
+        (item) => item.id === createResponse.body.id,
+    );
+
+    expect(service).toBeDefined();
+    expect(service.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(service.name).toBe("my-api");
+    expect(service.url).toBe("https://example.com");
     });
 
     test("GET /services/:id returns the matching service", async () => {
-        const createResponse = await request(app).post("/services").send({
-            name: "my-api",
-            url: "https://example.com",
-        });
+        const createResponse = await createTestService();
 
         const response = await request(app).get(
             `/services/${createResponse.body.id}`,
@@ -96,10 +113,7 @@ describe("health-api", () => {
             ok: true,
         });
 
-        const createResponse = await request(app).post("/services").send({
-            name: "my-api",
-            url: "https://example.com",
-        });
+        const createResponse = await createTestService();
 
         const response = await request(app).get(
             `/services/${createResponse.body.id}/health`,
@@ -119,10 +133,7 @@ describe("health-api", () => {
     });
 
     test("DELETE /services/:id deletes an existing service", async () => {
-        const createResponse = await request(app).post("/services").send({
-            name: "my-api",
-            url: "https://example.com",
-        });
+        const createResponse = await createTestService();
 
         const response = await request(app).delete(
             `/services/${createResponse.body.id}`,
@@ -134,7 +145,7 @@ describe("health-api", () => {
         );
     });
 
-    test("POST /Finding and deleting a non-existing service", async () => {
+    test("DELETE /services/:id returns 404 for a non-existing service", async () => {
         const response = await request(app).delete(
             "/services/00000000-0000-0000-0000-000000000000",
         );
@@ -144,10 +155,7 @@ describe("health-api", () => {
     });
 
     test("GET /services/:id returns 404 after the service is deleted", async () => {
-        const createResponse = await request(app).post("/services").send({
-            name: "my-api",
-            url: "https://example.com",
-        });
+        const createResponse = await createTestService();
 
         await request(app).delete(`/services/${createResponse.body.id}`);
 
@@ -216,5 +224,65 @@ describe("health-api", () => {
         expect(response.body.error).toBe("internal server error");
 
         querySpy.mockRestore();
+    });
+
+    test("PATCH /services/:id updates the service", async () => {
+        const createResponse = await createTestService();
+
+        const response = await request(app)
+            .patch(`/services/${createResponse.body.id}`)
+            .send({
+                name: "updated-api",
+                url: "https://example.org",
+            });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body.id).toBe(createResponse.body.id);
+        expect(response.body.name).toBe("updated-api");
+        expect(response.body.url).toBe("https://example.org");
+    });
+
+    test("PATCH /services/:id rejects an invalid UUID", async () => {
+        const response = await request(app).patch("/services/not-a-uuid").send({
+            name: "updated-api",
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("invalid service id");
+    });
+
+    test("PATCH /services/:id rejects an invalid URL", async () => {
+        const createResponse = await createTestService();
+
+        const response = await request(app)
+            .patch(`/services/${createResponse.body.id}`)
+            .send({
+                url: "not-a-url",
+            });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("url must be a valid URL");
+    });
+
+    test("PATCH /services/:id returns 404 for a non-existing service", async () => {
+        const response = await request(app)
+            .patch("/services/00000000-0000-0000-0000-000000000000")
+            .send({
+                name: "updated-api",
+            });
+
+        expect(response.statusCode).toBe(404);
+        expect(response.body.error).toBe("service not found");
+    });
+
+    test("PATCH /services/:id rejects an empty update", async () => {
+        const createResponse = await createTestService();
+
+        const response = await request(app)
+            .patch(`/services/${createResponse.body.id}`)
+            .send({});
+
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("name or url is required");
     });
 });

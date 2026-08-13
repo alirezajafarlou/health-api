@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
+const path = require("path");
 const app = express();
 app.use(express.json());
 
@@ -25,7 +26,9 @@ const pool = new Pool({
 });
 
 app.get("/", (req, res) => {
-    res.json({ message: "health-api is running" });
+    res.json({ 
+        message: "health-api is running" 
+    });
 });
 
 app.get("/health", (req, res) => {
@@ -153,6 +156,60 @@ app.get("/services/:id", async (req, res) => {
     res.json(result.rows[0]);
 });
 
+app.patch("/services/:id", async (req, res) => {
+    const { name, url } = req.body;
+
+    // Validate the update body first.
+    if (!name && !url) {
+        return res.status(400).json({
+            error: "name or url is required",
+        });
+    }
+
+    // Validate URL only if one was provided.
+    if (url) {
+        try {
+            new URL(url);
+        } catch {
+            return res.status(400).json({
+                error: "url must be a valid URL",
+            });
+        }
+    }
+
+    // Validate service ID.
+    if (!isValidUUID(req.params.id)) {
+        return res.status(400).json({
+            error: "invalid service id",
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            `UPDATE services
+             SET name = COALESCE($1, name),
+                 url = COALESCE($2, url)
+             WHERE id = $3
+             RETURNING *`,
+            [name ?? null, url ?? null, req.params.id],
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                error: "service not found",
+            });
+        }
+
+        res.status(200).json(result.rows[0]);
+    } catch (error) {
+        console.error("Database error:", error);
+
+        return res.status(500).json({
+            error: "internal server error",
+        });
+    }
+});
+
 // Check the service URL to determine its health.
 app.get("/services/:id/health", async (req, res) => {
     if (!isValidUUID(req.params.id)) {
@@ -184,24 +241,51 @@ app.get("/services/:id/health", async (req, res) => {
     const service = result.rows[0];
 
     try {
-        // A successful HTTP response means the service is considered healthy.
-        const response = await fetch(service.url);
+        const serviceUrl = String(service.url).trim();
+
+        const parsedUrl = new URL(serviceUrl);
+
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+            return res.status(400).json({
+                error: "service URL must use http or https",
+            });
+        }
+
+        const response = await fetch(parsedUrl, {
+            method: "GET",
+            signal: AbortSignal.timeout(10000),
+        });
 
         res.json({
             id: service.id,
             name: service.name,
             status: response.ok ? "healthy" : "unhealthy",
+            statusCode: response.status,
         });
-    } catch {
-        return res.status(500).json({
-            error: "internal server error",
+    } catch (error) {
+        console.error(
+            `Health check failed for ${JSON.stringify(service.url)}:`,
+            error,
+        );
+
+        res.status(200).json({
+            id: service.id,
+            name: service.name,
+            status: "unreachable",
+            error: error.message,
         });
     }
 });
 
+app.get("/dashboard", (req, res) => {
+    res.sendFile(path.join(__dirname, "frontend", "index.html"));
+});
+
+app.use(express.static(path.join(__dirname, "frontend")));
+
 if (require.main === module) {
-    app.listen(port, () => {
-        console.log(`Server listening on port ${port}`);
+    app.listen(port, "0.0.0.0", () => {
+        console.log(`Server listening on 0.0.0.0:${port}`);
     });
 }
 

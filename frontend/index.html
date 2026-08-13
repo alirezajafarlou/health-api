@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="Health API service monitoring dashboard"
+        />
+        <meta name="theme-color" content="#f4f4f4" />
+        <title>Health API</title>
+
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+
+        <link rel="stylesheet" href="style.css" />
+
+        <script>
+            (() => {
+                const savedTheme = localStorage.getItem("health-api-theme");
+                const prefersDark = window.matchMedia(
+                    "(prefers-color-scheme: dark)",
+                ).matches;
+
+                const theme = savedTheme || (prefersDark ? "dark" : "light");
+
+                document.documentElement.dataset.theme = theme;
+            })();
+        </script>
+    </head>
+
+    <body>
+        <div class="app-shell">
+            <header class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">H</div>
+
+                    <div>
+                        <h1>Health API</h1>
+                        <span>Service monitor</span>
+                    </div>
+                </div>
+
+                <div class="topbar-actions">
+                    <div class="system-status">
+                        <span class="status-dot"></span>
+                        <span>System operational</span>
+                    </div>
+
+                    <button
+                        id="theme-toggle"
+                        class="theme-toggle"
+                        type="button"
+                        aria-label="Switch to dark mode"
+                        title="Switch theme"
+                    >
+                        <span class="theme-icon theme-icon-sun">☼</span>
+                        <span class="theme-icon theme-icon-moon">☾</span>
+                    </button>
+                </div>
+            </header>
+
+            <main>
+                <section class="hero">
+                    <div>
+                        <p class="eyebrow">OVERVIEW</p>
+
+                        <h2>Service health</h2>
+
+                        <p class="hero-copy">
+                            Monitor the availability of your services from one
+                            place.
+                        </p>
+                    </div>
+
+                    <button
+                        id="refresh-button"
+                        class="button button-secondary"
+                        type="button"
+                    >
+                        <span class="refresh-icon">↻</span>
+                        Refresh
+                    </button>
+                </section>
+
+                <section class="stats" aria-label="Service statistics">
+                    <div class="stat-card">
+                        <span class="stat-label">TOTAL SERVICES</span>
+                        <strong id="total-services">—</strong>
+                    </div>
+
+                    <div class="stat-card">
+                        <span class="stat-label">HEALTHY</span>
+                        <strong id="healthy-services">—</strong>
+                    </div>
+
+                    <div class="stat-card">
+                        <span class="stat-label">UNHEALTHY</span>
+                        <strong id="unhealthy-services">—</strong>
+                    </div>
+                </section>
+
+                <section class="content-grid">
+                    <div class="services-section">
+                        <div class="section-heading">
+                            <div>
+                                <p class="eyebrow">SERVICES</p>
+                                <h3>Your services</h3>
+                            </div>
+
+                            <span id="service-count" class="count-badge">
+                                0
+                            </span>
+                        </div>
+
+                        <div class="search-bar">
+                            <span class="search-icon">⌕</span>
+
+                            <input
+                                id="search-input"
+                                type="search"
+                                placeholder="Search services..."
+                                autocomplete="off"
+                                aria-label="Search services"
+                            />
+
+                            <button
+                                id="clear-search"
+                                class="clear-search"
+                                type="button"
+                                aria-label="Clear search"
+                                title="Clear search"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div id="services-list" class="services-list">
+                            <div class="empty-state">
+                                <div class="empty-icon">—</div>
+
+                                <h4>No services yet</h4>
+
+                                <p>
+                                    Add your first service to start monitoring
+                                    it.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <aside class="add-panel">
+                        <p class="eyebrow">NEW SERVICE</p>
+
+                        <h3>Add a service</h3>
+
+                        <p class="panel-copy">
+                            Register an endpoint and monitor its availability.
+                        </p>
+
+                        <form id="service-form">
+                            <div class="field">
+                                <label for="service-name">Name</label>
+
+                                <input
+                                    id="service-name"
+                                    name="name"
+                                    type="text"
+                                    placeholder="My API"
+                                    autocomplete="off"
+                                    required
+                                />
+                            </div>
+
+                            <div class="field">
+                                <label for="service-url">URL</label>
+
+                                <input
+                                    id="service-url"
+                                    name="url"
+                                    type="url"
+                                    placeholder="https://example.com"
+                                    required
+                                />
+                            </div>
+
+                            <button type="submit" class="button button-primary">
+                                Add service
+                                <span>→</span>
+                            </button>
+
+                            <p
+                                id="form-message"
+                                class="form-message"
+                                aria-live="polite"
+                            ></p>
+                        </form>
+                    </aside>
+                </section>
+            </main>
+
+            <footer>
+                <span>Health API</span>
+                <span>Monitoring dashboard</span>
+            </footer>
+        </div>
+
+        <!-- Edit modal -->
+        <div
+            id="edit-modal"
+            class="modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-modal-title"
+            hidden
+        >
+            <div class="modal">
+                <div class="modal-header">
+                    <div>
+                        <p class="eyebrow">EDIT SERVICE</p>
+                        <h3 id="edit-modal-title">Update service</h3>
+                    </div>
+
+                    <button
+                        id="close-edit-modal"
+                        class="modal-close"
+                        type="button"
+                        aria-label="Close edit dialog"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <form id="edit-form">
+                    <input id="edit-id" type="hidden" />
+
+                    <div class="field">
+                        <label for="edit-name">Name</label>
+
+                        <input
+                            id="edit-name"
+                            name="name"
+                            type="text"
+                            autocomplete="off"
+                            required
+                        />
+                    </div>
+
+                    <div class="field">
+                        <label for="edit-url">URL</label>
+
+                        <input
+                            id="edit-url"
+                            name="url"
+                            type="url"
+                            autocomplete="off"
+                            required
+                        />
+                    </div>
+
+                    <p
+                        id="edit-message"
+                        class="form-message"
+                        aria-live="polite"
+                    ></p>
+
+                    <div class="modal-actions">
+                        <button
+                            id="cancel-edit"
+                            type="button"
+                            class="button button-secondary"
+                        >
+                            Cancel
+                        </button>
+
+                        <button
+                            id="save-edit"
+                            type="submit"
+                            class="button button-primary"
+                        >
+                            Save changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+        <script src="app.js"></script>
+    </body>
+</html>

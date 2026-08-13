@@ -37,4 +37,20 @@ module.exports = [
             },
         },
     },
+
+    // Frontend JavaScript runs in the browser.
+    {
+        files: ["frontend/**/*.js"],
+        languageOptions: {
+            ecmaVersion: "latest",
+            sourceType: "script",
+            globals: {
+                window: "readonly",
+                document: "readonly",
+                localStorage: "readonly",
+                FormData: "readonly",
+                console: "readonly",
+            },
+        },
+    },
 ];
