@@ -1,0 +1,37 @@
+services:
+  api:
+    build: .
+    container_name: health-api
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: healthapi
+      DB_PASSWORD: healthapi
+      DB_NAME: healthapi
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    container_name: health-api-db
+    environment:
+      POSTGRES_USER: healthapi
+      POSTGRES_PASSWORD: healthapi
+      POSTGRES_DB: healthapi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthapi -d healthapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
