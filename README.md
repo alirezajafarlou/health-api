@@ -4,6 +4,10 @@ A lightweight service monitoring application built with Node.js, Express, and Po
 
 Health API lets you register HTTP/HTTPS services and check their availability from a simple web dashboard or through the REST API.
 
+## Dashboard
+![Health API dark mode](docs/screenshots/dashboard-dark.png)
+![Health API dark mode](docs/screenshots/dashboard-light.png)
+
 ## Features
 
 - Service registration and management
