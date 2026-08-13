@@ -8,6 +8,7 @@ const { Pool } = require("pg");
 
 const port = process.env.PORT || 3000;
 
+// Create a PostgreSQL connection pool using environment variables.
 const pool = new Pool({
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
@@ -34,12 +35,14 @@ app.get("/about", (req, res) => {
 app.post("/services", async(req, res) => {
     const { name, url } = req.body;
 
+    // Validate required fields before attempting to write to the database.
     if (!name || !url) {
         return res.status(400).json({
             error: "name and url are required"
         });
     }
 
+    // Ensure the URL can be parsed before storing it.
     try {
         new URL(url);
     } catch {
@@ -114,6 +117,7 @@ app.get("/services/:id", async (req, res) => {
     res.json(result.rows[0]);
 });
 
+// Check the service URL to determine its health.
 app.get("/services/:id/health", async (req, res) => {
     const result = await pool.query(
         "SELECT * FROM services WHERE id = $1",
@@ -129,6 +133,7 @@ app.get("/services/:id/health", async (req, res) => {
     const service = result.rows[0];
 
     try {
+        // A successful HTTP response means the service is considered healthy.
         const response = await fetch(service.url);
 
         res.json({
@@ -137,10 +142,10 @@ app.get("/services/:id/health", async (req, res) => {
             status: response.ok ? "healthy" : "unhealthy"
         });
     } catch {
-    return res.status(500).json({
-        error: "internal server error"
-    });
-}
+        return res.status(500).json({
+            error: "internal server error"
+        });
+    }
 });
 
 if (require.main === module) {

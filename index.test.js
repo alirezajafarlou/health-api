@@ -5,6 +5,7 @@ global.fetch = jest.fn();
 
 describe("health-api", () => {
     afterAll(async () => {
+        // Close the PostgreSQL connection pool after all tests finish.
         await app.pool.end();
     });
 
