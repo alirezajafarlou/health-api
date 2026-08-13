@@ -2,6 +2,8 @@ const js = require("@eslint/js");
 
 module.exports = [
     js.configs.recommended,
+
+    // Configure modern CommonJS JavaScript used by the application.
     {
         files: ["**/*.js"],
         languageOptions: {
@@ -21,6 +23,8 @@ module.exports = [
             "no-unused-vars": "warn",
         },
     },
+
+    // Jest provides these globals when running test files.
     {
         files: ["**/*.test.js"],
         languageOptions: {

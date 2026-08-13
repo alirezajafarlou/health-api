@@ -31,90 +31,79 @@ describe("health-api", () => {
     });
 
     test("POST /services sends info about the given service", async () => {
-        const response = await request(app)
-        .post("/services")
-        .send({
+        const response = await request(app).post("/services").send({
             name: "my-api",
-            url: "https://example.com"
+            url: "https://example.com",
         });
 
         expect(response.statusCode).toBe(201);
-        expect(response.body.name).toBe("my-api")
+        expect(response.body.name).toBe("my-api");
     });
 
     test("POST /services rejects missing fields", async () => {
-        const response = await request(app)
-            .post("/services")
-            .send({
-                name: "my-api"
-            });
+        const response = await request(app).post("/services").send({
+            name: "my-api",
+        });
 
         expect(response.statusCode).toBe(400);
         expect(response.body.error).toBe("name and url are required");
     });
 
     test("POST /services rejects an invalid URL", async () => {
-        const response = await request(app)
-            .post("/services")
-            .send({
-                name: "my-api",
-                url: "not-a-url"
-            });
+        const response = await request(app).post("/services").send({
+            name: "my-api",
+            url: "not-a-url",
+        });
 
         expect(response.statusCode).toBe(400);
         expect(response.body.error).toBe("url must be a valid URL");
     });
 
     test("GET /services returns the info about existing services", async () => {
-        await request(app)
-        .post("/services")
-        .send({
+        await request(app).post("/services").send({
             name: "my-api",
-            url: "https://example.com"
+            url: "https://example.com",
         });
 
-    const response = await request(app).get("/services");
+        const response = await request(app).get("/services");
 
-    expect(response.statusCode).toBe(200);
-    expect(response.body[0].id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    );
-    expect(response.body[0].name).toBe("my-api");
-    expect(response.body[0].url).toBe("https://example.com");
+        expect(response.statusCode).toBe(200);
+        expect(response.body[0].id).toMatch(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        );
+        expect(response.body[0].name).toBe("my-api");
+        expect(response.body[0].url).toBe("https://example.com");
     });
 
     test("GET /services/:id returns the matching service", async () => {
-        const createResponse = await request(app)
-            .post("/services")
-            .send({
-                name: "my-api",
-                url: "https://example.com"
-            });
+        const createResponse = await request(app).post("/services").send({
+            name: "my-api",
+            url: "https://example.com",
+        });
 
-        const response = await request(app)
-            .get(`/services/${createResponse.body.id}`);
+        const response = await request(app).get(
+            `/services/${createResponse.body.id}`,
+        );
 
         expect(response.statusCode).toBe(200);
         expect(response.body.id).toBe(createResponse.body.id);
         expect(response.body.name).toBe("my-api");
         expect(response.body.url).toBe("https://example.com");
-        
     });
 
     test("GET /services/:id/health checks the service health", async () => {
         fetch.mockResolvedValue({
-            ok: true
+            ok: true,
         });
 
-        const createResponse = await request(app)
-            .post("/services")
-            .send({
-                name: "my-api",
-                url: "https://example.com"
-            });
+        const createResponse = await request(app).post("/services").send({
+            name: "my-api",
+            url: "https://example.com",
+        });
 
-        const response = await request(app)
-            .get(`/services/${createResponse.body.id}/health`);
+        const response = await request(app).get(
+            `/services/${createResponse.body.id}/health`,
+        );
 
         expect(response.statusCode).toBe(200);
         expect(response.body.id).toBe(createResponse.body.id);
@@ -123,70 +112,109 @@ describe("health-api", () => {
     });
 
     test("GET /services/:id/health rejects an invalid UUID", async () => {
-        const response = await request(app)
-            .get("/services/not-a-uuid/health");
+        const response = await request(app).get("/services/not-a-uuid/health");
 
         expect(response.statusCode).toBe(400);
         expect(response.body.error).toBe("invalid service id");
     });
-    
+
     test("DELETE /services/:id deletes an existing service", async () => {
-        const createResponse = await request(app)
-            .post("/services")
-            .send({
-                name: "my-api",
-                url: "https://example.com"
-            });
-        
-        const response = await request(app)
-            .delete(`/services/${createResponse.body.id}`);
+        const createResponse = await request(app).post("/services").send({
+            name: "my-api",
+            url: "https://example.com",
+        });
+
+        const response = await request(app).delete(
+            `/services/${createResponse.body.id}`,
+        );
 
         expect(response.statusCode).toBe(200);
         expect(response.body.message).toBe(
-            `deleted service with the id ${createResponse.body.id}`
+            `deleted service with the id ${createResponse.body.id}`,
         );
     });
 
     test("POST /Finding and deleting a non-existing service", async () => {
-        const response = await request(app)
-            .delete("/services/00000000-0000-0000-0000-000000000000");
+        const response = await request(app).delete(
+            "/services/00000000-0000-0000-0000-000000000000",
+        );
 
         expect(response.statusCode).toBe(404);
         expect(response.body.error).toBe("service not found");
     });
 
     test("GET /services/:id returns 404 after the service is deleted", async () => {
-        const createResponse = await request(app)
-            .post("/services")
-            .send({
-                name: "my-api",
-                url: "https://example.com"
-            });
+        const createResponse = await request(app).post("/services").send({
+            name: "my-api",
+            url: "https://example.com",
+        });
 
-        await request(app)
-            .delete(`/services/${createResponse.body.id}`);
-        
-        const response = await request(app)
-            .get(`/services/${createResponse.body.id}`);
+        await request(app).delete(`/services/${createResponse.body.id}`);
+
+        const response = await request(app).get(
+            `/services/${createResponse.body.id}`,
+        );
 
         expect(response.statusCode).toBe(404);
         expect(response.body.error).toBe("service not found");
     });
 
     test("GET /services/:id rejects an invalid UUID", async () => {
-        const response = await request(app)
-            .get("/services/not-a-uuid");
+        const response = await request(app).get("/services/not-a-uuid");
 
         expect(response.statusCode).toBe(400);
         expect(response.body.error).toBe("invalid service id");
     });
 
     test("DELETE /services/:id rejects an invalid UUID", async () => {
-        const response = await request(app)
-            .delete("/services/not-a-uuid");
+        const response = await request(app).delete("/services/not-a-uuid");
 
         expect(response.statusCode).toBe(400);
         expect(response.body.error).toBe("invalid service id");
     });
 
+    test("GET /services/:id handles database errors", async () => {
+        const querySpy = jest
+            .spyOn(app.pool, "query")
+            .mockRejectedValue(new Error("database failure"));
+
+        const response = await request(app).get(
+            "/services/00000000-0000-0000-0000-000000000001",
+        );
+
+        expect(response.statusCode).toBe(500);
+        expect(response.body.error).toBe("internal server error");
+
+        querySpy.mockRestore();
+    });
+
+    test("DELETE /services/:id handles database errors", async () => {
+        const querySpy = jest
+            .spyOn(app.pool, "query")
+            .mockRejectedValue(new Error("database failure"));
+
+        const response = await request(app).delete(
+            "/services/00000000-0000-0000-0000-000000000001",
+        );
+
+        expect(response.statusCode).toBe(500);
+        expect(response.body.error).toBe("internal server error");
+
+        querySpy.mockRestore();
+    });
+
+    test("GET /services/:id/health handles database errors", async () => {
+        const querySpy = jest
+            .spyOn(app.pool, "query")
+            .mockRejectedValue(new Error("database failure"));
+
+        const response = await request(app).get(
+            "/services/00000000-0000-0000-0000-000000000001/health",
+        );
+
+        expect(response.statusCode).toBe(500);
+        expect(response.body.error).toBe("internal server error");
+
+        querySpy.mockRestore();
+    });
 });

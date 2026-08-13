@@ -21,7 +21,7 @@ const pool = new Pool({
     port: process.env.DB_PORT,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME,
 });
 
 app.get("/", (req, res) => {
@@ -33,19 +33,19 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/about", (req, res) => {
-    res.json({ 
+    res.json({
         name: "health-api",
-        description: "a health checker api"
+        description: "a health checker api",
     });
 });
 
-app.post("/services", async(req, res) => {
+app.post("/services", async (req, res) => {
     const { name, url } = req.body;
 
     // Validate required fields before attempting to write to the database.
     if (!name || !url) {
         return res.status(400).json({
-            error: "name and url are required"
+            error: "name and url are required",
         });
     }
 
@@ -54,7 +54,7 @@ app.post("/services", async(req, res) => {
         new URL(url);
     } catch {
         return res.status(400).json({
-            error: "url must be a valid URL"
+            error: "url must be a valid URL",
         });
     }
 
@@ -63,7 +63,7 @@ app.post("/services", async(req, res) => {
             `INSERT INTO services (name, url)
              VALUES ($1, $2)
              RETURNING *`,
-            [name, url]
+            [name, url],
         );
 
         res.status(201).json(result.rows[0]);
@@ -71,23 +71,21 @@ app.post("/services", async(req, res) => {
         console.error("Database error:", error);
 
         res.status(500).json({
-            error: "internal server error"
+            error: "internal server error",
         });
     }
 });
 
 app.get("/services", async (req, res) => {
     try {
-        const result = await pool.query(
-            "SELECT * FROM services"
-        );
+        const result = await pool.query("SELECT * FROM services");
 
         res.json(result.rows);
     } catch (error) {
         console.error("Database error:", error);
 
         res.status(500).json({
-            error: "internal server error"
+            error: "internal server error",
         });
     }
 });
@@ -95,41 +93,60 @@ app.get("/services", async (req, res) => {
 app.delete("/services/:id", async (req, res) => {
     if (!isValidUUID(req.params.id)) {
         return res.status(400).json({
-            error: "invalid service id"
+            error: "invalid service id",
         });
     }
 
-    const result = await pool.query(
-        "DELETE FROM services WHERE id = $1 RETURNING *",
-        [req.params.id]
-    );
+    let result;
+
+    try {
+        result = await pool.query(
+            "DELETE FROM services WHERE id = $1 RETURNING *",
+            [req.params.id],
+        );
+    } catch (error) {
+        console.error("Database error:", error);
+
+        return res.status(500).json({
+            error: "internal server error",
+        });
+    }
 
     if (result.rows.length === 0) {
         return res.status(404).json({
-            error: "service not found"
+            error: "service not found",
         });
     }
 
     res.status(200).json({
-        message: `deleted service with the id ${req.params.id}`
+        message: `deleted service with the id ${req.params.id}`,
     });
 });
 
 app.get("/services/:id", async (req, res) => {
     if (!isValidUUID(req.params.id)) {
         return res.status(400).json({
-            error: "invalid service id"
+            error: "invalid service id",
         });
     }
 
-    const result = await pool.query(
-        "SELECT * FROM services WHERE id = $1",
-        [req.params.id]
-    );
+    let result;
+
+    try {
+        result = await pool.query("SELECT * FROM services WHERE id = $1", [
+            req.params.id,
+        ]);
+    } catch (error) {
+        console.error("Database error:", error);
+
+        return res.status(500).json({
+            error: "internal server error",
+        });
+    }
 
     if (result.rows.length === 0) {
         return res.status(404).json({
-            error: "service not found"
+            error: "service not found",
         });
     }
 
@@ -140,18 +157,27 @@ app.get("/services/:id", async (req, res) => {
 app.get("/services/:id/health", async (req, res) => {
     if (!isValidUUID(req.params.id)) {
         return res.status(400).json({
-            error: "invalid service id"
+            error: "invalid service id",
         });
     }
 
-    const result = await pool.query(
-        "SELECT * FROM services WHERE id = $1",
-        [req.params.id]
-    );
+    let result;
+
+    try {
+        result = await pool.query("SELECT * FROM services WHERE id = $1", [
+            req.params.id,
+        ]);
+    } catch (error) {
+        console.error("Database error:", error);
+
+        return res.status(500).json({
+            error: "internal server error",
+        });
+    }
 
     if (result.rows.length === 0) {
         return res.status(404).json({
-            error: "service not found"
+            error: "service not found",
         });
     }
 
@@ -164,11 +190,11 @@ app.get("/services/:id/health", async (req, res) => {
         res.json({
             id: service.id,
             name: service.name,
-            status: response.ok ? "healthy" : "unhealthy"
+            status: response.ok ? "healthy" : "unhealthy",
         });
     } catch {
         return res.status(500).json({
-            error: "internal server error"
+            error: "internal server error",
         });
     }
 });
