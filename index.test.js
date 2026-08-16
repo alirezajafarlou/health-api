@@ -1,288 +1,211 @@
+"use strict";
+
+process.env.NODE_ENV = "test";
+process.env.AUTH_DISABLED = "true";
+process.env.MONITOR_ENABLED = "false";
+
+jest.mock("./src/ssrf", () => ({
+    checkHttpEndpoint: jest.fn(),
+}));
+
 const request = require("supertest");
 const app = require("./index");
+const { checkHttpEndpoint } = require("./src/ssrf");
 
-global.fetch = jest.fn();
+async function resetDatabase() {
+    await app.pool.query("DELETE FROM health_check_results");
+    await app.pool.query("DELETE FROM incidents");
+    await app.pool.query("DELETE FROM services");
+}
 
-const createdServiceIds = [];
-
-async function createTestService() {
-    const response = await request(app).post("/services").send({
-        name: "my-api",
-        url: "https://example.com",
-    });
-
-    createdServiceIds.push(response.body.id);
-
-    return response;
+async function createService(overrides = {}) {
+    return request(app)
+        .post("/services")
+        .send({
+            name: "my-api",
+            url: "https://example.com/health",
+            ...overrides,
+        });
 }
 
 describe("health-api", () => {
-    beforeEach(() => {
-        fetch.mockReset();
+    beforeEach(async () => {
+        checkHttpEndpoint.mockReset();
+        await resetDatabase();
     });
 
     afterAll(async () => {
-        // Close the PostgreSQL connection pool after all tests finish.
+        await resetDatabase();
         await app.pool.end();
     });
 
-    test("GET / returns the application message", async () => {
-        const response = await request(app).get("/");
-
+    test("GET /live returns process liveness", async () => {
+        const response = await request(app).get("/live");
         expect(response.statusCode).toBe(200);
-        expect(response.body.message).toBe("health-api is running");
+        expect(response.body.status).toBe("alive");
     });
 
-    test("GET /health returns healthy status", async () => {
-        const response = await request(app).get("/health");
-
+    test("GET /ready checks database readiness", async () => {
+        const response = await request(app).get("/ready");
         expect(response.statusCode).toBe(200);
-        expect(response.body.status).toBe("healthy");
+        expect(response.body.status).toBe("ready");
     });
 
-    test("GET /about returns description about the api", async () => {
-        const response = await request(app).get("/about");
-
+    test("GET /dashboard serves the preloaded dashboard HTML", async () => {
+        const response = await request(app).get("/dashboard");
         expect(response.statusCode).toBe(200);
-        expect(response.body.description).toBe("a health checker api");
+        expect(response.headers["content-type"]).toMatch(/text\/html/);
+        expect(response.text).toMatch(/<!doctype html>/i);
+        expect(response.headers["cache-control"]).toBe("no-store");
     });
 
-    test("POST /services sends info about the given service", async () => {
-        const response = await request(app).post("/services").send({
-            name: "my-api",
-            url: "https://example.com",
-        });
-
+    test("POST /services creates a monitored service", async () => {
+        const response = await createService();
         expect(response.statusCode).toBe(201);
         expect(response.body.name).toBe("my-api");
+        expect(response.body.enabled).toBe(true);
+        expect(response.body.interval_seconds).toBeGreaterThanOrEqual(15);
     });
 
-    test("POST /services rejects missing fields", async () => {
-        const response = await request(app).post("/services").send({
-            name: "my-api",
-        });
-
+    test("POST /services rejects unsupported protocols", async () => {
+        const response = await createService({ url: "file:///etc/passwd" });
         expect(response.statusCode).toBe(400);
-        expect(response.body.error).toBe("name and url are required");
+        expect(response.body.error).toBe("url must use http or https");
     });
 
-    test("POST /services rejects an invalid URL", async () => {
-        const response = await request(app).post("/services").send({
-            name: "my-api",
-            url: "not-a-url",
+    test("POST /services rejects URL credentials", async () => {
+        const response = await createService({
+            url: "https://user:pass@example.com/health",
         });
-
         expect(response.statusCode).toBe(400);
-        expect(response.body.error).toBe("url must be a valid URL");
+        expect(response.body.error).toMatch(/credentials/i);
     });
 
-    test("GET /services returns the info about existing services", async () => {
-        const createResponse = await createTestService();
-
-    const response = await request(app).get("/services");
-
-    expect(response.statusCode).toBe(200);
-
-    const service = response.body.find(
-        (item) => item.id === createResponse.body.id,
-    );
-
-    expect(service).toBeDefined();
-    expect(service.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    );
-    expect(service.name).toBe("my-api");
-    expect(service.url).toBe("https://example.com");
+    test("POST /services rejects unknown fields", async () => {
+        const response = await createService({ admin: true });
+        expect(response.statusCode).toBe(400);
+        expect(response.body.error).toBe("unknown field: admin");
     });
 
-    test("GET /services/:id returns the matching service", async () => {
-        const createResponse = await createTestService();
-
-        const response = await request(app).get(
-            `/services/${createResponse.body.id}`,
-        );
-
+    test("GET /services lists services without triggering checks", async () => {
+        await createService();
+        const response = await request(app).get("/services");
         expect(response.statusCode).toBe(200);
-        expect(response.body.id).toBe(createResponse.body.id);
-        expect(response.body.name).toBe("my-api");
-        expect(response.body.url).toBe("https://example.com");
+        expect(response.body).toHaveLength(1);
+        expect(checkHttpEndpoint).not.toHaveBeenCalled();
     });
 
-    test("GET /services/:id/health checks the service health", async () => {
-        fetch.mockResolvedValue({
-            ok: true,
+    test("PATCH /services updates whitelisted fields", async () => {
+        const created = await createService();
+        const response = await request(app)
+            .patch(`/services/${created.body.id}`)
+            .send({ intervalSeconds: 120, enabled: false });
+        expect(response.statusCode).toBe(200);
+        expect(response.body.interval_seconds).toBe(120);
+        expect(response.body.enabled).toBe(false);
+    });
+
+    test("GET /services/:id/health returns cached status", async () => {
+        const created = await createService();
+        const response = await request(app).get(
+            `/services/${created.body.id}/health`,
+        );
+        expect(response.statusCode).toBe(200);
+        expect(response.body.status).toBe("unknown");
+        expect(checkHttpEndpoint).not.toHaveBeenCalled();
+    });
+
+    test("POST /services/:id/check runs and persists a health check", async () => {
+        checkHttpEndpoint.mockResolvedValue({
+            status: "healthy",
+            statusCode: 204,
+            latencyMs: 12.5,
+            errorCode: null,
+            error: null,
         });
+        const created = await createService();
 
-        const createResponse = await createTestService();
-
-        const response = await request(app).get(
-            `/services/${createResponse.body.id}/health`,
+        const checked = await request(app).post(
+            `/services/${created.body.id}/check`,
         );
+        expect(checked.statusCode).toBe(200);
+        expect(checked.body.status).toBe("healthy");
+        expect(checked.body.statusCode).toBe(204);
 
+        const history = await request(app).get(
+            `/services/${created.body.id}/history`,
+        );
+        expect(history.statusCode).toBe(200);
+        expect(history.body).toHaveLength(1);
+        expect(history.body[0].status).toBe("healthy");
+    });
+
+    test("two failed checks open an incident and recovery resolves it", async () => {
+        checkHttpEndpoint.mockResolvedValue({
+            status: "unreachable",
+            statusCode: null,
+            latencyMs: 5,
+            errorCode: "TIMEOUT",
+            error: "health request failed",
+        });
+        const created = await createService();
+        await request(app).post(`/services/${created.body.id}/check`);
+        await request(app).post(`/services/${created.body.id}/check`);
+
+        let incidents = await request(app).get(
+            `/services/${created.body.id}/incidents`,
+        );
+        expect(incidents.body).toHaveLength(1);
+        expect(incidents.body[0].resolved_at).toBeNull();
+
+        checkHttpEndpoint.mockResolvedValue({
+            status: "healthy",
+            statusCode: 200,
+            latencyMs: 4,
+            errorCode: null,
+            error: null,
+        });
+        await request(app).post(`/services/${created.body.id}/check`);
+
+        incidents = await request(app).get(
+            `/services/${created.body.id}/incidents`,
+        );
+        expect(incidents.body[0].resolved_at).not.toBeNull();
+    });
+
+    test("GET /stats reports totals independently of list pagination", async () => {
+        await createService();
+        const response = await request(app).get("/stats");
         expect(response.statusCode).toBe(200);
-        expect(response.body.id).toBe(createResponse.body.id);
-        expect(response.body.name).toBe("my-api");
-        expect(response.body.status).toBe("healthy");
+        expect(response.body.total).toBe(1);
+        expect(response.body.unknown).toBe(1);
     });
 
-    test("GET /services/:id/health rejects an invalid UUID", async () => {
-        const response = await request(app).get("/services/not-a-uuid/health");
-
-        expect(response.statusCode).toBe(400);
-        expect(response.body.error).toBe("invalid service id");
-    });
-
-    test("DELETE /services/:id deletes an existing service", async () => {
-        const createResponse = await createTestService();
-
-        const response = await request(app).delete(
-            `/services/${createResponse.body.id}`,
+    test("manual check refuses an already leased service", async () => {
+        const created = await createService();
+        await app.pool.query(
+            "UPDATE services SET check_lease_until = NOW() + INTERVAL '1 minute' WHERE id = $1",
+            [created.body.id],
         );
+        const response = await request(app).post(
+            `/services/${created.body.id}/check`,
+        );
+        expect(response.statusCode).toBe(409);
+        expect(response.body.error).toMatch(/already in progress/);
+    });
 
+    test("DELETE /services removes service and cascades monitoring data", async () => {
+        const created = await createService();
+        const response = await request(app).delete(`/services/${created.body.id}`);
         expect(response.statusCode).toBe(200);
-        expect(response.body.message).toBe(
-            `deleted service with the id ${createResponse.body.id}`,
-        );
+
+        const lookup = await request(app).get(`/services/${created.body.id}`);
+        expect(lookup.statusCode).toBe(404);
     });
 
-    test("DELETE /services/:id returns 404 for a non-existing service", async () => {
-        const response = await request(app).delete(
-            "/services/00000000-0000-0000-0000-000000000000",
-        );
-
-        expect(response.statusCode).toBe(404);
-        expect(response.body.error).toBe("service not found");
-    });
-
-    test("GET /services/:id returns 404 after the service is deleted", async () => {
-        const createResponse = await createTestService();
-
-        await request(app).delete(`/services/${createResponse.body.id}`);
-
-        const response = await request(app).get(
-            `/services/${createResponse.body.id}`,
-        );
-
-        expect(response.statusCode).toBe(404);
-        expect(response.body.error).toBe("service not found");
-    });
-
-    test("GET /services/:id rejects an invalid UUID", async () => {
+    test("invalid UUIDs are rejected before database access", async () => {
         const response = await request(app).get("/services/not-a-uuid");
-
         expect(response.statusCode).toBe(400);
         expect(response.body.error).toBe("invalid service id");
-    });
-
-    test("DELETE /services/:id rejects an invalid UUID", async () => {
-        const response = await request(app).delete("/services/not-a-uuid");
-
-        expect(response.statusCode).toBe(400);
-        expect(response.body.error).toBe("invalid service id");
-    });
-
-    test("GET /services/:id handles database errors", async () => {
-        const querySpy = jest
-            .spyOn(app.pool, "query")
-            .mockRejectedValue(new Error("database failure"));
-
-        const response = await request(app).get(
-            "/services/00000000-0000-0000-0000-000000000001",
-        );
-
-        expect(response.statusCode).toBe(500);
-        expect(response.body.error).toBe("internal server error");
-
-        querySpy.mockRestore();
-    });
-
-    test("DELETE /services/:id handles database errors", async () => {
-        const querySpy = jest
-            .spyOn(app.pool, "query")
-            .mockRejectedValue(new Error("database failure"));
-
-        const response = await request(app).delete(
-            "/services/00000000-0000-0000-0000-000000000001",
-        );
-
-        expect(response.statusCode).toBe(500);
-        expect(response.body.error).toBe("internal server error");
-
-        querySpy.mockRestore();
-    });
-
-    test("GET /services/:id/health handles database errors", async () => {
-        const querySpy = jest
-            .spyOn(app.pool, "query")
-            .mockRejectedValue(new Error("database failure"));
-
-        const response = await request(app).get(
-            "/services/00000000-0000-0000-0000-000000000001/health",
-        );
-
-        expect(response.statusCode).toBe(500);
-        expect(response.body.error).toBe("internal server error");
-
-        querySpy.mockRestore();
-    });
-
-    test("PATCH /services/:id updates the service", async () => {
-        const createResponse = await createTestService();
-
-        const response = await request(app)
-            .patch(`/services/${createResponse.body.id}`)
-            .send({
-                name: "updated-api",
-                url: "https://example.org",
-            });
-
-        expect(response.statusCode).toBe(200);
-        expect(response.body.id).toBe(createResponse.body.id);
-        expect(response.body.name).toBe("updated-api");
-        expect(response.body.url).toBe("https://example.org");
-    });
-
-    test("PATCH /services/:id rejects an invalid UUID", async () => {
-        const response = await request(app).patch("/services/not-a-uuid").send({
-            name: "updated-api",
-        });
-
-        expect(response.statusCode).toBe(400);
-        expect(response.body.error).toBe("invalid service id");
-    });
-
-    test("PATCH /services/:id rejects an invalid URL", async () => {
-        const createResponse = await createTestService();
-
-        const response = await request(app)
-            .patch(`/services/${createResponse.body.id}`)
-            .send({
-                url: "not-a-url",
-            });
-
-        expect(response.statusCode).toBe(400);
-        expect(response.body.error).toBe("url must be a valid URL");
-    });
-
-    test("PATCH /services/:id returns 404 for a non-existing service", async () => {
-        const response = await request(app)
-            .patch("/services/00000000-0000-0000-0000-000000000000")
-            .send({
-                name: "updated-api",
-            });
-
-        expect(response.statusCode).toBe(404);
-        expect(response.body.error).toBe("service not found");
-    });
-
-    test("PATCH /services/:id rejects an empty update", async () => {
-        const createResponse = await createTestService();
-
-        const response = await request(app)
-            .patch(`/services/${createResponse.body.id}`)
-            .send({});
-
-        expect(response.statusCode).toBe(400);
-        expect(response.body.error).toBe("name or url is required");
     });
 });

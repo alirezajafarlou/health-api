@@ -2,10 +2,9 @@ const js = require("@eslint/js");
 
 module.exports = [
     js.configs.recommended,
-
-    // Configure modern CommonJS JavaScript used by the application.
     {
         files: ["**/*.js"],
+        ignores: ["node_modules/**", "coverage/**"],
         languageOptions: {
             ecmaVersion: "latest",
             sourceType: "commonjs",
@@ -15,30 +14,35 @@ module.exports = [
                 module: "readonly",
                 __dirname: "readonly",
                 console: "readonly",
-                fetch: "readonly",
+                Buffer: "readonly",
                 URL: "readonly",
+                fetch: "readonly",
+                AbortSignal: "readonly",
+                setTimeout: "readonly",
+                clearTimeout: "readonly",
+                setInterval: "readonly",
+                clearInterval: "readonly",
             },
         },
         rules: {
-            "no-unused-vars": "warn",
+            "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
         },
     },
-
-    // Jest provides these globals when running test files.
     {
         files: ["**/*.test.js"],
         languageOptions: {
             globals: {
                 jest: "readonly",
                 describe: "readonly",
+                beforeAll: "readonly",
+                beforeEach: "readonly",
+                afterEach: "readonly",
                 afterAll: "readonly",
                 test: "readonly",
                 expect: "readonly",
             },
         },
     },
-
-    // Frontend JavaScript runs in the browser.
     {
         files: ["frontend/**/*.js"],
         languageOptions: {
@@ -49,6 +53,9 @@ module.exports = [
                 document: "readonly",
                 localStorage: "readonly",
                 FormData: "readonly",
+                URLSearchParams: "readonly",
+                fetch: "readonly",
+                URL: "readonly",
                 console: "readonly",
             },
         },
