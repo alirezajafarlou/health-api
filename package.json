@@ -1,16 +1,18 @@
 {
   "name": "health-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "Production-hardened HTTP/HTTPS service monitoring with a web dashboard and PostgreSQL.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
     "lint": "eslint .",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "ci": "npm run lint && npm test"
   },
-  "keywords": [],
+  "keywords": ["monitoring", "health-check", "uptime", "express", "postgresql"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
@@ -25,5 +27,8 @@
     "jest": "^30.4.2",
     "prettier": "3.9.6",
     "supertest": "^7.2.2"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

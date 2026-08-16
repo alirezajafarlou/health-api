@@ -1,18 +1,19 @@
+"use strict";
+
 const serviceList = document.getElementById("services-list");
 const serviceForm = document.getElementById("service-form");
 const refreshButton = document.getElementById("refresh-button");
 const themeToggle = document.getElementById("theme-toggle");
-
 const searchInput = document.getElementById("search-input");
 const clearSearchButton = document.getElementById("clear-search");
 const searchBar = document.querySelector(".search-bar");
-
 const totalServices = document.getElementById("total-services");
 const healthyServices = document.getElementById("healthy-services");
 const unhealthyServices = document.getElementById("unhealthy-services");
 const serviceCount = document.getElementById("service-count");
 const formMessage = document.getElementById("form-message");
 const toast = document.getElementById("toast");
+const systemStatus = document.getElementById("system-status-text");
 
 const editModal = document.getElementById("edit-modal");
 const editForm = document.getElementById("edit-form");
@@ -32,17 +33,14 @@ function getTheme() {
 
 function updateThemeButton() {
     const darkMode = getTheme() === "dark";
-
     themeToggle.setAttribute(
         "aria-label",
         darkMode ? "Switch to light mode" : "Switch to dark mode",
     );
-
     themeToggle.setAttribute(
         "title",
         darkMode ? "Switch to light mode" : "Switch to dark mode",
     );
-
     document
         .querySelector('meta[name="theme-color"]')
         ?.setAttribute("content", darkMode ? "#0a0a0a" : "#f4f4f4");
@@ -55,326 +53,198 @@ function setTheme(theme) {
 }
 
 themeToggle.addEventListener("click", () => {
-    const nextTheme = getTheme() === "dark" ? "light" : "dark";
-
-    setTheme(nextTheme);
+    setTheme(getTheme() === "dark" ? "light" : "dark");
 });
-
 updateThemeButton();
+
+async function fetchSystemStatus() {
+    try {
+        const response = await fetch("/ready", { cache: "no-store" });
+        systemStatus.textContent = response.ok ? "System operational" : "System degraded";
+    } catch {
+        systemStatus.textContent = "System degraded";
+    }
+}
 
 async function fetchServices() {
     try {
-        const response = await fetch("/services");
-
-        if (!response.ok) {
-            throw new Error("Failed to fetch services");
-        }
-
+        const query = searchInput.value.trim();
+        const params = new URLSearchParams({ limit: "100" });
+        if (query) params.set("search", query);
+        const response = await fetch(`/services?${params.toString()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Failed to fetch services");
         services = await response.json();
-
         renderServices();
-        updateStats();
     } catch (error) {
         showToast("Unable to load services.");
         console.error(error);
     }
 }
 
-function getFilteredServices() {
-    const query = searchInput.value.trim().toLowerCase();
-
-    if (!query) {
-        return services;
+async function fetchStats() {
+    try {
+        const response = await fetch("/stats", { cache: "no-store" });
+        if (!response.ok) throw new Error("Failed to fetch stats");
+        const stats = await response.json();
+        totalServices.textContent = stats.total;
+        healthyServices.textContent = stats.healthy;
+        unhealthyServices.textContent = stats.unhealthy;
+    } catch (error) {
+        console.error(error);
     }
+}
 
-    return services.filter((service) => {
-        const name = String(service.name || "").toLowerCase();
-        const url = String(service.url || "").toLowerCase();
-
-        return name.includes(query) || url.includes(query);
-    });
+function getFilteredServices() {
+    return services;
 }
 
 function updateSearchUI() {
-    const hasValue = searchInput.value.length > 0;
+    searchBar.classList.toggle("has-value", searchInput.value.length > 0);
+}
 
-    searchBar.classList.toggle("has-value", hasValue);
+function statusView(service) {
+    const status = service.last_status || "unknown";
+    if (status === "healthy") return { className: "healthy", label: "Healthy" };
+    if (status === "unhealthy") return { className: "unhealthy", label: "Unhealthy" };
+    if (status === "blocked") return { className: "unhealthy", label: "Blocked" };
+    if (status === "unreachable") return { className: "unhealthy", label: "Unreachable" };
+    return { className: "", label: "Unknown" };
 }
 
 function renderServices() {
     serviceCount.textContent = services.length;
-
-    if (services.length === 0) {
-        serviceList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">—</div>
-                <h4>No services yet</h4>
-                <p>Add your first service to start monitoring it.</p>
-            </div>
-        `;
-
-        updateStats();
-        return;
-    }
-
     const filteredServices = getFilteredServices();
 
-    if (filteredServices.length === 0) {
-        serviceList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">⌕</div>
-                <h4>No matching services</h4>
-                <p>
-                    Try searching for a different name or URL.
-                </p>
-            </div>
-        `;
-
-        updateStats();
+    if (services.length === 0) {
+        const searching = Boolean(searchInput.value.trim());
+        serviceList.innerHTML = searching
+            ? `
+                <div class="empty-state">
+                    <div class="empty-icon">⌕</div>
+                    <h4>No matching services</h4>
+                    <p>Try searching for a different name or URL.</p>
+                </div>`
+            : `
+                <div class="empty-state">
+                    <div class="empty-icon">—</div>
+                    <h4>No services yet</h4>
+                    <p>Add your first service to start monitoring it.</p>
+                </div>`;
         return;
     }
 
     serviceList.innerHTML = filteredServices
-        .map(
-            (service) => `
-                <article
-                    class="service-card"
-                    data-id="${escapeHtml(service.id)}"
-                >
+        .map((service) => {
+            const status = statusView(service);
+            return `
+                <article class="service-card" data-id="${escapeHtml(service.id)}">
                     <div class="service-info">
-                        <h4 class="service-name">
-                            ${escapeHtml(service.name)}
-                        </h4>
-
-                        <p class="service-url">
-                            ${escapeHtml(service.url)}
-                        </p>
+                        <h4 class="service-name">${escapeHtml(service.name)}</h4>
+                        <p class="service-url">${escapeHtml(service.url)}</p>
                     </div>
-
-                    <div
-                        class="health-status"
-                        id="status-${escapeHtml(service.id)}"
-                    >
+                    <div class="health-status ${status.className}" id="status-${escapeHtml(service.id)}">
                         <span class="health-dot"></span>
-                        <span>Unknown</span>
+                        <span>${status.label}</span>
                     </div>
-
                     <div class="service-actions">
-                        <button
-                            class="icon-button"
-                            type="button"
-                            data-action="health"
-                            title="Check health"
-                            aria-label="Check health of ${escapeHtml(service.name)}"
-                        >
-                            ↻
-                        </button>
-
-                        <button
-                            class="icon-button"
-                            type="button"
-                            data-action="edit"
-                            title="Edit service"
-                            aria-label="Edit ${escapeHtml(service.name)}"
-                        >
-                            ✎
-                        </button>
-
-                        <button
-                            class="icon-button delete"
-                            type="button"
-                            data-action="delete"
-                            title="Delete service"
-                            aria-label="Delete ${escapeHtml(service.name)}"
-                        >
-                            ×
-                        </button>
+                        <button class="icon-button" type="button" data-action="health" title="Run check" aria-label="Run health check for ${escapeHtml(service.name)}">↻</button>
+                        <button class="icon-button" type="button" data-action="edit" title="Edit service" aria-label="Edit ${escapeHtml(service.name)}">✎</button>
+                        <button class="icon-button delete" type="button" data-action="delete" title="Delete service" aria-label="Delete ${escapeHtml(service.name)}">×</button>
                     </div>
-                </article>
-            `,
-        )
+                </article>`;
+        })
         .join("");
-
-    filteredServices.forEach((service) => {
-        checkHealth(service.id);
-    });
 }
 
 serviceList.addEventListener("click", (event) => {
     const button = event.target.closest("[data-action]");
-
-    if (!button) {
-        return;
-    }
-
+    if (!button) return;
     const serviceCard = button.closest(".service-card");
-
-    if (!serviceCard) {
-        return;
-    }
-
+    if (!serviceCard) return;
     const { id } = serviceCard.dataset;
-    const action = button.dataset.action;
-
-    if (action === "health") {
-        checkHealth(id);
-    }
-
-    if (action === "edit") {
-        openEditModal(id);
-    }
-
-    if (action === "delete") {
-        deleteService(id);
-    }
+    if (button.dataset.action === "health") void checkHealth(id);
+    if (button.dataset.action === "edit") openEditModal(id);
+    if (button.dataset.action === "delete") void deleteService(id);
 });
 
 async function checkHealth(id) {
     const statusElement = document.getElementById(`status-${id}`);
-
-    if (!statusElement) {
-        return;
+    if (statusElement) {
+        statusElement.className = "health-status";
+        statusElement.innerHTML = '<span class="health-dot"></span><span>Checking</span>';
     }
-
-    statusElement.className = "health-status";
-
-    statusElement.innerHTML = `
-        <span class="health-dot"></span>
-        <span>Checking</span>
-    `;
-
-    updateStats();
 
     try {
-        const response = await fetch(`/services/${id}/health`);
-
-        if (!response.ok) {
-            throw new Error("Health check failed");
-        }
-
+        const response = await fetch(`/services/${id}/check`, { method: "POST" });
         const data = await response.json();
-        const healthy = data.status === "healthy";
+        if (!response.ok) throw new Error(data.error || "Health check failed");
 
-        statusElement.className = `health-status ${
-            healthy ? "healthy" : "unhealthy"
-        }`;
-
-        statusElement.innerHTML = `
-            <span class="health-dot"></span>
-            <span>${healthy ? "Healthy" : "Unhealthy"}</span>
-        `;
-    } catch {
-        statusElement.className = "health-status unhealthy";
-
-        statusElement.innerHTML = `
-            <span class="health-dot"></span>
-            <span>Unreachable</span>
-        `;
+        const service = services.find((item) => item.id === id);
+        if (service) {
+            service.last_status = data.status;
+            service.last_status_code = data.statusCode;
+            service.last_latency_ms = data.latencyMs;
+            service.last_checked_at = data.checkedAt;
+        }
+        renderServices();
+        await fetchStats();
+    } catch (error) {
+        showToast(error.message);
+        await fetchServices();
     }
-
-    updateStats();
 }
 
 async function deleteService(id) {
     const service = services.find((item) => item.id === id);
-
-    if (!service) {
-        return;
-    }
-
-    const confirmed = window.confirm(
-        `Delete "${service.name}"? This cannot be undone.`,
-    );
-
-    if (!confirmed) {
-        return;
-    }
+    if (!service) return;
+    if (!window.confirm(`Delete "${service.name}"? This cannot be undone.`)) return;
 
     try {
-        const response = await fetch(`/services/${id}`, {
-            method: "DELETE",
-        });
-
+        const response = await fetch(`/services/${id}`, { method: "DELETE" });
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || "Failed to delete service");
-        }
-
+        if (!response.ok) throw new Error(data.error || "Failed to delete service");
         showToast("Service deleted.");
-        await fetchServices();
+        await Promise.all([fetchServices(), fetchStats()]);
     } catch (error) {
         showToast(error.message);
     }
 }
 
-/* =========================
-   Add service
-========================= */
-
 serviceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-
     const formData = new FormData(serviceForm);
-
-    const name = formData.get("name").trim();
-    const url = formData.get("url").trim();
-
+    const name = String(formData.get("name") || "").trim();
+    const url = String(formData.get("url") || "").trim();
     formMessage.textContent = "";
     formMessage.className = "form-message";
 
     try {
         const response = await fetch("/services", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                name,
-                url,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, url }),
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || "Failed to add service");
-        }
-
+        if (!response.ok) throw new Error(data.error || "Failed to add service");
         serviceForm.reset();
-
         showToast("Service added.");
-        await fetchServices();
+        await Promise.all([fetchServices(), fetchStats()]);
     } catch (error) {
         formMessage.textContent = error.message;
         formMessage.className = "form-message error";
     }
 });
 
-/* =========================
-   Edit service
-========================= */
-
 function openEditModal(id) {
     const service = services.find((item) => item.id === id);
-
-    if (!service) {
-        return;
-    }
-
+    if (!service) return;
     editId.value = service.id;
     editName.value = service.name;
     editUrl.value = service.url;
-
     editMessage.textContent = "";
-    editMessage.className = "form-message";
-
     editModal.hidden = false;
     document.body.style.overflow = "hidden";
-
-    window.requestAnimationFrame(() => {
-        editName.focus();
-    });
+    window.requestAnimationFrame(() => editName.focus());
 }
 
 function closeEditModal() {
@@ -387,60 +257,33 @@ function closeEditModal() {
 
 closeEditModalButton.addEventListener("click", closeEditModal);
 cancelEditButton.addEventListener("click", closeEditModal);
-
 editModal.addEventListener("click", (event) => {
-    if (event.target === editModal) {
-        closeEditModal();
-    }
+    if (event.target === editModal) closeEditModal();
 });
-
 document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !editModal.hidden) {
-        closeEditModal();
-    }
+    if (event.key === "Escape" && !editModal.hidden) closeEditModal();
 });
 
 editForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-
     const id = editId.value;
     const name = editName.value.trim();
     const url = editUrl.value.trim();
-
     editMessage.textContent = "";
-    editMessage.className = "form-message";
-
-    if (!name || !url) {
-        editMessage.textContent = "name and url are required";
-        editMessage.className = "form-message error";
-        return;
-    }
-
     saveEditButton.disabled = true;
     saveEditButton.textContent = "Saving…";
 
     try {
         const response = await fetch(`/services/${id}`, {
             method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                name,
-                url,
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, url }),
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || "Failed to update service");
-        }
-
+        if (!response.ok) throw new Error(data.error || "Failed to update service");
         closeEditModal();
-
         showToast("Service updated.");
-        await fetchServices();
+        await Promise.all([fetchServices(), fetchStats()]);
     } catch (error) {
         editMessage.textContent = error.message;
         editMessage.className = "form-message error";
@@ -450,88 +293,33 @@ editForm.addEventListener("submit", async (event) => {
     }
 });
 
-/* =========================
-   Search
-========================= */
-
+let searchTimer;
 searchInput.addEventListener("input", () => {
     updateSearchUI();
-    renderServices();
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => void fetchServices(), 250);
 });
-
 clearSearchButton.addEventListener("click", () => {
     searchInput.value = "";
     updateSearchUI();
-    renderServices();
+    void fetchServices();
     searchInput.focus();
 });
-
-/* =========================
-   Refresh
-========================= */
-
 refreshButton.addEventListener("click", async () => {
     refreshButton.disabled = true;
-
-    const originalContent = refreshButton.innerHTML;
-
+    const original = refreshButton.innerHTML;
     refreshButton.innerHTML = "Refreshing…";
-
-    await fetchServices();
-
-    refreshButton.innerHTML = originalContent;
+    await Promise.all([fetchServices(), fetchStats(), fetchSystemStatus()]);
+    refreshButton.innerHTML = original;
     refreshButton.disabled = false;
 });
-
-/* =========================
-   Statistics
-========================= */
-
-function updateStats() {
-    const statuses = services.map((service) => {
-        const element = document.getElementById(`status-${service.id}`);
-
-        if (!element) {
-            return null;
-        }
-
-        if (element.classList.contains("healthy")) {
-            return true;
-        }
-
-        if (element.classList.contains("unhealthy")) {
-            return false;
-        }
-
-        return null;
-    });
-
-    const healthy = statuses.filter(Boolean).length;
-    const unhealthy = statuses.filter((status) => status === false).length;
-
-    totalServices.textContent = services.length;
-    healthyServices.textContent = healthy;
-    unhealthyServices.textContent = unhealthy;
-}
-
-/* =========================
-   Toast
-========================= */
 
 function showToast(message) {
     toast.textContent = message;
     toast.classList.add("visible");
-
     window.clearTimeout(showToast.timeout);
-
-    showToast.timeout = window.setTimeout(() => {
-        toast.classList.remove("visible");
-    }, 3000);
+    showToast.timeout = window.setTimeout(() => toast.classList.remove("visible"), 3000);
 }
-
-/* =========================
-   Utilities
-========================= */
 
 function escapeHtml(value) {
     return String(value)
@@ -542,4 +330,4 @@ function escapeHtml(value) {
         .replaceAll("'", "&#039;");
 }
 
-fetchServices();
+void Promise.all([fetchServices(), fetchStats(), fetchSystemStatus()]);

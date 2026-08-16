@@ -8,17 +8,19 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     env:
+      NODE_ENV: test
+      AUTH_DISABLED: "true"
+      MONITOR_ENABLED: "false"
       DB_HOST: localhost
       DB_PORT: 5432
       DB_USER: healthapi
-      DB_PASSWORD: healthapi
+      DB_PASSWORD: healthapi-ci
       DB_NAME: healthapi
 
     services:
@@ -26,7 +28,7 @@ jobs:
         image: postgres:17
         env:
           POSTGRES_USER: healthapi
-          POSTGRES_PASSWORD: healthapi
+          POSTGRES_PASSWORD: healthapi-ci
           POSTGRES_DB: healthapi
         ports:
           - 5432:5432
@@ -57,14 +59,19 @@ jobs:
             -d $DB_NAME \
             -f db/schema.sql
 
-      - name: Run tests
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
         run: npm test
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
     permissions:
       contents: read
       packages: write
@@ -73,19 +80,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Build Docker image
+        run: |
+          docker build --pull \
+            -t health-api:ci \
+            .
+
       - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
+      - name: Tag Docker image for GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          docker build \
-            -t ghcr.io/${{ github.repository }}:latest \
-            .
+          docker tag health-api:ci ghcr.io/${{ github.repository }}:${{ github.sha }}
+          docker tag health-api:ci ghcr.io/${{ github.repository }}:latest
 
       - name: Push Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
+          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
           docker push ghcr.io/${{ github.repository }}:latest

@@ -2,26 +2,52 @@ services:
   api:
     build: .
     container_name: health-api
+    init: true
     ports:
       - "3000:3000"
     environment:
+      NODE_ENV: production
       PORT: 3000
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: healthapi
-      DB_PASSWORD: healthapi
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_NAME: healthapi
+      ADMIN_USERNAME: ${ADMIN_USERNAME:?Set ADMIN_USERNAME in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      MONITOR_ENABLED: "true"
+      DEFAULT_CHECK_INTERVAL_SECONDS: ${DEFAULT_CHECK_INTERVAL_SECONDS:-60}
+      DEFAULT_CHECK_TIMEOUT_MS: ${DEFAULT_CHECK_TIMEOUT_MS:-10000}
+      MONITOR_CONCURRENCY: ${MONITOR_CONCURRENCY:-5}
+      RESULT_RETENTION_DAYS: ${RESULT_RETENTION_DAYS:-30}
+      TARGET_ALLOWLIST: ${TARGET_ALLOWLIST:-}
+      ALLOW_PRIVATE_TARGETS: ${ALLOW_PRIVATE_TARGETS:-false}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
+      ALERT_WEBHOOK_TIMEOUT_MS: ${ALERT_WEBHOOK_TIMEOUT_MS:-5000}
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100
+    networks:
+      - backend
+      - egress
 
   postgres:
     image: postgres:17
     container_name: health-api-db
     environment:
       POSTGRES_USER: healthapi
-      POSTGRES_PASSWORD: healthapi
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: healthapi
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -32,6 +58,13 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks:
+      - backend
 
 volumes:
   postgres_data:
+
+networks:
+  backend:
+    internal: true
+  egress:
